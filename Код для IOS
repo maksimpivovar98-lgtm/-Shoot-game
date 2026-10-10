@@ -1,0 +1,851 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>SHOOT GAME - Pause & Bot Respawn</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; user-select: none; -webkit-tap-highlight-color: transparent; }
+        body { background: #000; overflow: hidden; font-family: 'Arial', sans-serif; }
+        canvas { display: block; width: 100vw; height: 100vh; touch-action: none; }
+
+        /* Меню */
+        #menu {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: #111; display: flex; flex-direction: column; justify-content: center; align-items: center;
+            z-index: 10; color: white;
+        }
+        #menu h1 { font-size: 8vh; color: #ff1a1a; margin-bottom: 4vh; letter-spacing: 5px; text-shadow: 0 0 15px rgba(255,0,0,0.6); font-weight: 900; text-align: center; }
+        .menu-btn {
+            background: none; border: 4px solid #fff; color: #fff; font-size: 3vh; font-weight: bold;
+            padding: 2vh 6vw; margin: 1.5vh; cursor: pointer; border-radius: 12px; transition: 0.2s;
+            font-family: 'Comic Sans MS', cursive, sans-serif; min-width: 50vw; text-align: center;
+        }
+        .menu-btn:hover { background: #fff; color: #000; transform: scale(1.05); }
+
+        /* Экран Game Over */
+        #game-over {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0, 0, 0, 0.85); display: none; flex-direction: column;
+            justify-content: center; align-items: center; z-index: 20; color: white;
+        }
+        #game-over h1 { font-size: 10vh; color: #ff1a1a; margin-bottom: 5vh; letter-spacing: 8px; text-shadow: 0 0 25px rgba(255,0,0,0.8); font-weight: 900; text-align: center; }
+        #game-over .menu-btn { border-color: #ff1a1a; color: #ff1a1a; }
+        #game-over .menu-btn:hover { background: #ff1a1a; color: #fff; }
+
+        /* Экран Паузы */
+        #pause-screen {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0, 0, 0, 0.85); display: none; flex-direction: column;
+            justify-content: center; align-items: center; z-index: 20; color: white;
+        }
+        #pause-screen h1 { font-size: 10vh; color: #f1c40f; margin-bottom: 5vh; letter-spacing: 8px; text-shadow: 0 0 25px rgba(241,196,15,0.8); font-weight: 900; text-align: center; }
+        #pause-screen .menu-btn { border-color: #f1c40f; color: #f1c40f; }
+        #pause-screen .menu-btn:hover { background: #f1c40f; color: #000; }
+
+        /* Игровой интерфейс */
+        #ui {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            display: none; pointer-events: none; z-index: 5;
+        }
+        
+        /* Патроны (Сверху по центру) */
+        #ammo-display {
+            position: absolute; top: 3vh; left: 50%; transform: translateX(-50%);
+            color: #fff; font-size: 4vh; font-weight: 900; 
+            text-shadow: 3px 3px 0 #000, -2px -2px 0 #000, 2px -2px 0 #000, -2px 2px 0 #000;
+            font-family: 'Arial Black', sans-serif; letter-spacing: 2px; white-space: nowrap;
+        }
+
+        /* Кнопка Паузы (Справа сверху) */
+        #btn-pause {
+            position: absolute; top: 3vh; right: 4vw;
+            width: 8vh; height: 8vh; border-radius: 50%;
+            background: rgba(80, 80, 80, 0.7); border: 3px solid rgba(255,255,255,0.9);
+            display: flex; justify-content: center; align-items: center;
+            pointer-events: auto; cursor: pointer; box-shadow: 0 0 15px rgba(0,0,0,0.5);
+        }
+        #btn-pause .icon { width: 4vh; height: 4vh; fill: #fff; }
+
+        /* Здоровье (Снизу по центру) */
+        #hp-bar-container {
+            position: absolute; bottom: 4vh; left: 50%; transform: translateX(-50%);
+            width: 40vw; height: 2.5vh; background: rgba(0,0,0,0.5); border-radius: 10px;
+            overflow: hidden; display: flex; align-items: center; border: 2px solid #000;
+        }
+        #hp-bar { width: 100%; height: 100%; background: #ff0000; border-radius: 20px; transition: width 0.1s; }
+
+        /* Джойстик (Слева снизу) */
+        #joystick-zone {
+            position: absolute; bottom: 5vh; left: 4vw; width: 20vh; height: 20vh;
+            pointer-events: auto; display: flex; justify-content: center; align-items: center;
+            touch-action: none;
+        }
+        #joystick-base {
+            width: 18vh; height: 18vh; background: rgba(100, 140, 180, 0.4); border-radius: 50%;
+            border: 4px solid rgba(255,255,255,0.4); position: relative; display: flex; justify-content: center; align-items: center;
+            box-shadow: 0 0 20px rgba(0,0,0,0.5);
+        }
+        #joystick-knob {
+            width: 8vh; height: 8vh; background: rgba(70, 100, 130, 0.9); border-radius: 50%; position: absolute;
+            box-shadow: 0 0 15px rgba(0,0,0,0.6); border: 2px solid rgba(255,255,255,0.5);
+        }
+
+        /* Кнопки действий (Справа снизу) */
+        #action-zone {
+            position: absolute; bottom: 5vh; right: 4vw; width: 22vh; height: 20vh;
+            pointer-events: auto; touch-action: none;
+        }
+        .action-btn {
+            position: absolute; border-radius: 50%;
+            background: rgba(80, 80, 80, 0.7); border: 3px solid rgba(255,255,255,0.9);
+            display: flex; justify-content: center; align-items: center; cursor: pointer;
+            pointer-events: auto; box-shadow: 0 0 15px rgba(0,0,0,0.5);
+        }
+        #btn-shoot { bottom: 0; right: 0; width: 11vh; height: 11vh; }
+        #btn-reload { bottom: 7vh; right: 8vh; width: 8vh; height: 8vh; background: rgba(40, 40, 40, 0.9); }
+        
+        .icon { fill: #fff; }
+        #btn-shoot .icon { width: 6vh; height: 6vh; }
+        #btn-reload .icon { width: 4vh; height: 4vh; }
+    </style>
+</head>
+<body>
+
+    <!-- Меню -->
+    <div id="menu">
+        <h1>SHOOT GAME</h1>
+        <button class="menu-btn" onclick="startGame()">Играть</button>
+        <button class="menu-btn" id="sound-btn" onclick="toggleSound()">Звук:on</button>
+    </div>
+
+    <!-- Экран Game Over -->
+    <div id="game-over">
+        <h1>GAME OVER</h1>
+        <button class="menu-btn" onclick="startGame()">Start Again</button>
+        <button class="menu-btn" onclick="backToMenu()">Back in Menu</button>
+    </div>
+
+    <!-- Экран Паузы -->
+    <div id="pause-screen">
+        <h1>PAUSE</h1>
+        <button class="menu-btn" onclick="resumeGame()">Resume</button>
+        <button class="menu-btn" onclick="startGame()">Start Again</button>
+        <button class="menu-btn" onclick="backToMenu()">Back in Menu</button>
+    </div>
+
+    <!-- Игровой UI -->
+    <div id="ui">
+        <div id="ammo-display">Патроны:30/30</div>
+        
+        <div id="btn-pause" onclick="pauseGame()">
+            <svg class="icon" viewBox="0 0 24 24"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
+        </div>
+
+        <div id="hp-bar-container">
+            <div id="hp-bar"></div>
+        </div>
+
+        <div id="joystick-zone">
+            <div id="joystick-base">
+                <div id="joystick-knob"></div>
+            </div>
+        </div>
+
+        <div id="action-zone">
+            <div id="btn-reload" class="action-btn">
+                <svg class="icon" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></svg>
+            </div>
+            <div id="btn-shoot" class="action-btn">
+                <svg class="icon" viewBox="0 0 24 24"><path d="M12 2l-1.5 6.5L2 12l8.5 3.5L12 22l1.5-6.5L22 12l-8.5-3.5z"/></svg>
+            </div>
+        </div>
+    </div>
+
+    <canvas id="gameCanvas"></canvas>
+
+<script>
+    // --- КОНФИГУРАЦИЯ ---
+    const CONFIG = {
+        playerSpeed: 4.5,
+        botSpeed: 2.5,
+        bulletSpeed: 15,
+        botShootCooldown: 100,
+        playerMaxHp: 100,
+        botMaxHp: 60,
+        mapWidth: 2500,
+        mapHeight: 1500,
+        maxBots: 5 // Максимальное количество ботов на карте
+    };
+
+    // --- СОСТОЯНИЕ ИГРЫ ---
+    let canvas, ctx;
+    let isGameRunning = false;
+    let isPaused = false;
+    let isSoundOn = true;
+    
+    // Камера
+    let camera = { x: 0, y: 0 };
+    
+    // Управление
+    const keys = { w: false, a: false, s: false, d: false };
+    let joystick = { active: false, dx: 0, dy: 0, startX: 0, startY: 0, maxDist: 70 };
+    let shootPressed = false;
+    let reloadPressed = false;
+
+    // Игровые объекты
+    let player = { x: 300, y: 300, hp: CONFIG.playerMaxHp, maxHp: CONFIG.playerMaxHp, radius: 22, angle: 0, color: '#3498db', moveAngle: 0 };
+    let bots = [];
+    let bullets = [];
+    let walls = [];
+    let reloadTimer = 0;
+    const MAGAZINE_SIZE = 30;
+    let ammo = MAGAZINE_SIZE;
+    let isReloading = false;
+    
+    // Таймеры респавна
+    let respawnTimers = [];
+
+    // --- ИНИЦИАЛИЗАЦИЯ ---
+    function init() {
+        canvas = document.getElementById('gameCanvas');
+        ctx = canvas.getContext('2d');
+        resizeCanvas();
+        window.addEventListener('resize', resizeCanvas);
+        
+        generateMap();
+        setupControls();
+        
+        // Начальный спавн ботов
+        for (let i = 0; i < CONFIG.maxBots; i++) {
+            spawnBotAtRandomPosition();
+        }
+
+        requestAnimationFrame(gameLoop);
+    }
+
+    function resizeCanvas() {
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+    }
+
+    // --- ГЕНЕРАЦИЯ КАРТЫ ---
+    function generateMap() {
+        walls = [
+            { x: 600, y: 150, w: 120, h: 250 },
+            { x: 900, y: 100, w: 150, h: 150 },
+            { x: 1300, y: 150, w: 350, h: 120 },
+            { x: 1800, y: 100, w: 200, h: 200 },
+            { x: 300, y: 400, w: 100, h: 350 },
+            { x: 700, y: 500, w: 120, h: 450 },
+            { x: 1100, y: 600, w: 350, h: 100 },
+            { x: 1600, y: 400, w: 200, h: 200 },
+            { x: 2000, y: 500, w: 150, h: 300 },
+            { x: 200, y: 900, w: 200, h: 200 },
+            { x: 500, y: 1100, w: 180, h: 180 },
+            { x: 1000, y: 950, w: 250, h: 120 },
+            { x: 1400, y: 900, w: 120, h: 300 },
+            { x: 1800, y: 1000, w: 200, h: 250 },
+            { x: 1500, y: 1300, w: 400, h: 120 },
+            { x: 700, y: 1300, w: 300, h: 100 }
+        ];
+    }
+
+    // Спавн бота в случайной точке карты
+    function spawnBotAtRandomPosition() {
+        let attempts = 0;
+        let x, y;
+        do {
+            x = Math.random() * (CONFIG.mapWidth - 100) + 50;
+            y = Math.random() * (CONFIG.mapHeight - 100) + 50;
+            attempts++;
+        } while (checkCollision(x, y, 40) && attempts < 50);
+
+        bots.push({
+            x: x, y: y, hp: CONFIG.botMaxHp, maxHp: CONFIG.botMaxHp, radius: 22,
+            angle: Math.random() * Math.PI * 2, color: '#e74c3c', cooldown: 0,
+            target: { x: Math.random() * CONFIG.mapWidth, y: Math.random() * CONFIG.mapHeight },
+            state: 'patrol',
+            spawnTimer: 60 // 1 секунда неуязвимости при спавне
+        });
+    }
+
+    // --- УПРАВЛЕНИЕ ---
+    function setupControls() {
+        window.addEventListener('keydown', (e) => {
+            if (e.key === 'w' || e.key === 'W' || e.key === 'ц') keys.w = true;
+            if (e.key === 's' || e.key === 'S' || e.key === 'ы') keys.s = true;
+            if (e.key === 'a' || e.key === 'A' || e.key === 'ф') keys.a = true;
+            if (e.key === 'd' || e.key === 'D' || e.key === 'в') keys.d = true;
+            if (e.key === ' ') shootPressed = true;
+            if (e.key === 'r' || e.key === 'R' || e.key === 'к') reloadPressed = true;
+            if (e.key === 'Escape' || e.key === 'p' || e.key === 'P') {
+                if (isGameRunning) {
+                    if (isPaused) resumeGame(); else pauseGame();
+                }
+            }
+        });
+        window.addEventListener('keyup', (e) => {
+            if (e.key === 'w' || e.key === 'W' || e.key === 'ц') keys.w = false;
+            if (e.key === 's' || e.key === 'S' || e.key === 'ы') keys.s = false;
+            if (e.key === 'a' || e.key === 'A' || e.key === 'ф') keys.a = false;
+            if (e.key === 'd' || e.key === 'D' || e.key === 'в') keys.d = false;
+            if (e.key === ' ') shootPressed = false;
+            if (e.key === 'r' || e.key === 'R' || e.key === 'к') reloadPressed = false;
+        });
+
+        const jZone = document.getElementById('joystick-zone');
+        const jKnob = document.getElementById('joystick-knob');
+
+        jZone.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            if (isPaused) return;
+            const touch = e.touches[0];
+            const rect = jZone.getBoundingClientRect();
+            
+            joystick.active = true;
+            joystick.startX = rect.left + rect.width / 2;
+            joystick.startY = rect.top + rect.height / 2;
+            
+            joystick.dx = 0;
+            joystick.dy = 0;
+            jKnob.style.transform = `translate(0px, 0px)`;
+            
+            updateJoystick(touch.clientX, touch.clientY, jKnob);
+        }, {passive: false});
+
+        window.addEventListener('touchmove', (e) => {
+            if (!joystick.active || isPaused) return;
+            e.preventDefault();
+            const touch = e.touches[0];
+            updateJoystick(touch.clientX, touch.clientY, jKnob);
+        }, {passive: false});
+
+        window.addEventListener('touchend', (e) => {
+            if (!joystick.active) return;
+            joystick.active = false;
+            joystick.dx = 0;
+            joystick.dy = 0;
+            jKnob.style.transform = `translate(0px, 0px)`;
+        });
+
+        const btnShoot = document.getElementById('btn-shoot');
+        const btnReload = document.getElementById('btn-reload');
+
+        btnShoot.addEventListener('touchstart', (e) => { e.preventDefault(); if (!isPaused) shootPressed = true; }, {passive: false});
+        btnShoot.addEventListener('touchend', (e) => { e.preventDefault(); shootPressed = false; }, {passive: false});
+        btnShoot.addEventListener('mousedown', () => { if (!isPaused) shootPressed = true; });
+        btnShoot.addEventListener('mouseup', () => shootPressed = false);
+
+        btnReload.addEventListener('touchstart', (e) => { e.preventDefault(); if (!isPaused) reloadPressed = true; }, {passive: false});
+        btnReload.addEventListener('touchend', (e) => { e.preventDefault(); reloadPressed = false; }, {passive: false});
+        btnReload.addEventListener('mousedown', () => { if (!isPaused) reloadPressed = true; });
+        btnReload.addEventListener('mouseup', () => reloadPressed = false);
+    }
+
+    function updateJoystick(x, y, knob) {
+        let dx = x - joystick.startX;
+        let dy = y - joystick.startY;
+        let dist = Math.sqrt(dx*dx + dy*dy);
+        
+        if (dist > joystick.maxDist) {
+            dx = (dx / dist) * joystick.maxDist;
+            dy = (dy / dist) * joystick.maxDist;
+        }
+        
+        joystick.dx = dx / joystick.maxDist;
+        joystick.dy = dy / joystick.maxDist;
+        
+        knob.style.transform = `translate(${dx}px, ${dy}px)`;
+    }
+
+    // --- ЛОГИКА ---
+    function startGame() {
+        document.getElementById('menu').style.display = 'none';
+        document.getElementById('game-over').style.display = 'none';
+        document.getElementById('pause-screen').style.display = 'none';
+        document.getElementById('ui').style.display = 'block';
+        isGameRunning = true;
+        isPaused = false;
+        player.hp = CONFIG.playerMaxHp;
+        player.x = 300; player.y = 300;
+        player.angle = 0;
+        player.moveAngle = 0;
+        
+        bots = [];
+        bullets = [];
+        respawnTimers = [];
+        
+        // Спавн стартовых ботов
+        for (let i = 0; i < CONFIG.maxBots; i++) {
+            spawnBotAtRandomPosition();
+        }
+        
+        ammo = MAGAZINE_SIZE;
+        isReloading = false;
+        
+        // Сброс камеры
+        camera.x = player.x;
+        camera.y = player.y;
+    }
+
+    function pauseGame() {
+        if (!isGameRunning) return;
+        isPaused = true;
+        document.getElementById('pause-screen').style.display = 'flex';
+        document.getElementById('ui').style.display = 'none';
+    }
+
+    function resumeGame() {
+        isPaused = false;
+        document.getElementById('pause-screen').style.display = 'none';
+        document.getElementById('ui').style.display = 'block';
+    }
+
+    function backToMenu() {
+        document.getElementById('game-over').style.display = 'none';
+        document.getElementById('pause-screen').style.display = 'none';
+        document.getElementById('menu').style.display = 'flex';
+        document.getElementById('ui').style.display = 'none';
+        isGameRunning = false;
+        isPaused = false;
+    }
+
+    function toggleSound() {
+        isSoundOn = !isSoundOn;
+        document.getElementById('sound-btn').innerText = isSoundOn ? 'Звук:on' : 'Звук:off';
+    }
+
+    function playShootSound() {
+        if (!isSoundOn) return;
+        try {
+            const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.type = 'square';
+            osc.frequency.setValueAtTime(600, audioCtx.currentTime);
+            osc.frequency.exponentialRampToValueAtTime(100, audioCtx.currentTime + 0.1);
+            gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.1);
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+            osc.start();
+            osc.stop(audioCtx.currentTime + 0.1);
+        } catch(e) {}
+    }
+
+    function checkCollision(x, y, radius) {
+        if (x - radius < 0 || x + radius > CONFIG.mapWidth || y - radius < 0 || y + radius > CONFIG.mapHeight) return true;
+        
+        for (let w of walls) {
+            let closestX = Math.max(w.x, Math.min(x, w.x + w.w));
+            let closestY = Math.max(w.y, Math.min(y, w.y + w.h));
+            let dx = x - closestX;
+            let dy = y - closestY;
+            if (dx * dx + dy * dy < radius * radius) return true;
+        }
+        return false;
+    }
+
+    function shoot(shooter, isPlayer) {
+        const spread = isPlayer ? 0 : 0.15;
+        const angle = shooter.angle + (Math.random() - 0.5) * spread;
+        bullets.push({
+            x: shooter.x + Math.cos(angle) * 30,
+            y: shooter.y + Math.sin(angle) * 30,
+            vx: Math.cos(angle) * CONFIG.bulletSpeed,
+            vy: Math.sin(angle) * CONFIG.bulletSpeed,
+            owner: isPlayer ? 'player' : 'bot',
+            life: 100,
+            color: isPlayer ? '#f1c40f' : '#e67e22'
+        });
+        if (isPlayer) playShootSound();
+    }
+
+    function update() {
+        if (!isGameRunning || isPaused) return;
+
+        // --- Таймеры респавна ботов ---
+        for (let i = respawnTimers.length - 1; i >= 0; i--) {
+            respawnTimers[i]--;
+            if (respawnTimers[i] <= 0) {
+                spawnBotAtRandomPosition();
+                respawnTimers.splice(i, 1);
+            }
+        }
+
+        // --- Игрок ---
+        let moveX = 0; let moveY = 0;
+        
+        if (keys.w) moveY -= 1;
+        if (keys.s) moveY += 1;
+        if (keys.a) moveX -= 1;
+        if (keys.d) moveX += 1;
+        
+        if (joystick.active) {
+            moveX = joystick.dy; 
+            moveY = -joystick.dx; 
+        }
+
+        if (moveX !== 0 && moveY !== 0) {
+            let len = Math.sqrt(moveX*moveX + moveY*moveY);
+            moveX /= len; moveY /= len;
+        }
+
+        let nextX = player.x + moveX * CONFIG.playerSpeed;
+        let nextY = player.y + moveY * CONFIG.playerSpeed;
+
+        if (!checkCollision(nextX, player.y, player.radius)) player.x = nextX;
+        if (!checkCollision(player.x, nextY, player.radius)) player.y = nextY;
+
+        if (moveX !== 0 || moveY !== 0) {
+            player.moveAngle = Math.atan2(moveY, moveX);
+        }
+        let angleDiff = player.moveAngle - player.angle;
+        while (angleDiff > Math.PI) angleDiff -= Math.PI * 2;
+        while (angleDiff < -Math.PI) angleDiff += Math.PI * 2;
+        player.angle += angleDiff * 0.2;
+
+        // Стрельба
+        if (shootPressed && !isReloading) {
+            if (ammo > 0) {
+                shoot(player, true);
+                ammo--;
+                shootPressed = false;
+                setTimeout(() => { if(shootPressed) shootPressed = false; }, 200); 
+            } else {
+                reloadPressed = true;
+            }
+        }
+
+        // Перезарядка
+        if (reloadPressed && !isReloading && ammo < MAGAZINE_SIZE) {
+            isReloading = true;
+            reloadTimer = 90;
+            reloadPressed = false;
+        }
+
+        if (isReloading) {
+            reloadTimer--;
+            if (reloadTimer <= 0) {
+                isReloading = false;
+                ammo = MAGAZINE_SIZE;
+            }
+        }
+
+        // --- Боты ---
+        bots.forEach(bot => {
+            if (bot.hp <= 0) return;
+            
+            // Таймер неуязвимости при спавне
+            if (bot.spawnTimer > 0) {
+                bot.spawnTimer--;
+            }
+
+            let dx = player.x - bot.x;
+            let dy = player.y - bot.y;
+            let dist = Math.sqrt(dx*dx + dy*dy);
+
+            if (dist < 450) {
+                bot.state = 'attack';
+            } else {
+                bot.state = 'patrol';
+            }
+
+            if (bot.state === 'attack') {
+                bot.angle = Math.atan2(dy, dx);
+                
+                if (dist > 280) {
+                    let moveX = Math.cos(bot.angle) * CONFIG.botSpeed;
+                    let moveY = Math.sin(bot.angle) * CONFIG.botSpeed;
+                    if (!checkCollision(bot.x + moveX, bot.y, bot.radius)) bot.x += moveX;
+                    if (!checkCollision(bot.x, bot.y + moveY, bot.radius)) bot.y += moveY;
+                } else {
+                    let strafeAngle = bot.angle + Math.PI/2;
+                    let moveX = Math.cos(strafeAngle) * CONFIG.botSpeed * 0.6;
+                    let moveY = Math.sin(strafeAngle) * CONFIG.botSpeed * 0.6;
+                    if (!checkCollision(bot.x + moveX, bot.y, bot.radius)) bot.x += moveX;
+                    if (!checkCollision(bot.x, bot.y + moveY, bot.radius)) bot.y += moveY;
+                }
+
+                if (bot.cooldown <= 0 && dist < 450 && bot.spawnTimer <= 0) {
+                    shoot(bot, false);
+                    bot.cooldown = CONFIG.botShootCooldown + Math.random() * 60;
+                }
+            } else {
+                if (!bot.target) bot.target = { x: Math.random() * CONFIG.mapWidth, y: Math.random() * CONFIG.mapHeight };
+                let tDx = bot.target.x - bot.x;
+                let tDy = bot.target.y - bot.y;
+                let tDist = Math.sqrt(tDx*tDx + tDy*tDy);
+                
+                if (tDist < 50) {
+                    bot.target = { x: Math.random() * CONFIG.mapWidth, y: Math.random() * CONFIG.mapHeight };
+                } else {
+                    bot.angle = Math.atan2(tDy, tDx);
+                    let moveX = Math.cos(bot.angle) * CONFIG.botSpeed * 0.6;
+                    let moveY = Math.sin(bot.angle) * CONFIG.botSpeed * 0.6;
+                    if (!checkCollision(bot.x + moveX, bot.y, bot.radius)) bot.x += moveX;
+                    if (!checkCollision(bot.x, bot.y + moveY, bot.radius)) bot.y += moveY;
+                }
+            }
+            if (bot.cooldown > 0) bot.cooldown--;
+        });
+
+        // --- Пули ---
+        for (let i = bullets.length - 1; i >= 0; i--) {
+            let b = bullets[i];
+            b.x += b.vx;
+            b.y += b.vy;
+            b.life--;
+
+            let hit = false;
+
+            if (checkCollision(b.x, b.y, 5)) hit = true;
+
+            if (!hit && b.owner === 'bot') {
+                let dx = b.x - player.x;
+                let dy = b.y - player.y;
+                if (dx*dx + dy*dy < player.radius * player.radius) {
+                    player.hp -= 10;
+                    hit = true;
+                }
+            }
+
+            if (!hit && b.owner === 'player') {
+                bots.forEach(bot => {
+                    if (bot.hp <= 0 || bot.spawnTimer > 0) return;
+                    let dx = b.x - bot.x;
+                    let dy = b.y - bot.y;
+                    if (dx*dx + dy*dy < bot.radius * bot.radius) {
+                        bot.hp -= 25;
+                        hit = true;
+                        if (bot.hp <= 0) {
+                            // Запуск таймера респавна (2 секунды = 120 кадров)
+                            respawnTimers.push(120);
+                        }
+                    }
+                });
+            }
+
+            if (hit || b.life <= 0) {
+                bullets.splice(i, 1);
+            }
+        }
+        
+        // Удаляем мертвых ботов
+        bots = bots.filter(bot => bot.hp > 0);
+
+        // === ОБРАБОТКА СМЕРТИ ИГРОКА ===
+        if (player.hp <= 0) {
+            player.hp = 0;
+            isGameRunning = false;
+            document.getElementById('game-over').style.display = 'flex';
+            document.getElementById('ui').style.display = 'none';
+        }
+
+        document.getElementById('hp-bar').style.width = (player.hp / player.maxHp * 100) + '%';
+        
+        // === ПЛАВНОЕ СЛЕЖЕНИЕ КАМЕРЫ ===
+        let targetCamX = player.x;
+        let targetCamY = player.y;
+        
+        camera.x += (targetCamX - camera.x) * 0.15;
+        camera.y += (targetCamY - camera.y) * 0.15;
+    }
+
+    // --- ОТРИСОВКА ПЕРСОНАЖЕЙ ---
+    function drawPlayer(x, y, angle, isBot) {
+        ctx.save();
+        ctx.translate(x, y);
+        ctx.rotate(angle);
+
+        const bodyColor = isBot ? '#e74c3c' : '#3498db';
+        const armorColor = isBot ? '#a93226' : '#2980b9';
+        const skinColor = '#f1c40f';
+
+        // Тень
+        ctx.fillStyle = 'rgba(0,0,0,0.4)';
+        ctx.beginPath();
+        ctx.ellipse(0, 5, 25, 18, 0, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Ноги
+        ctx.fillStyle = '#2c3e50';
+        ctx.fillRect(-15, -12, 12, 24);
+        ctx.fillRect(-15, 12, 12, 24);
+
+        // Тело
+        ctx.fillStyle = armorColor;
+        ctx.beginPath();
+        ctx.roundRect(-10, -18, 30, 36, 8);
+        ctx.fill();
+        
+        ctx.fillStyle = bodyColor;
+        ctx.beginPath();
+        ctx.roundRect(-5, -15, 20, 30, 5);
+        ctx.fill();
+
+        // Голова
+        ctx.fillStyle = skinColor;
+        ctx.beginPath();
+        ctx.arc(5, 0, 14, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Каска
+        ctx.fillStyle = isBot ? '#641e16' : '#1a5276';
+        ctx.beginPath();
+        ctx.arc(5, 0, 15, -Math.PI * 0.8, Math.PI * 0.8);
+        ctx.fill();
+        ctx.fillRect(-5, -15, 20, 30);
+
+        // Оружие
+        ctx.fillStyle = '#1c1c1c';
+        ctx.fillRect(15, -4, 10, 8);
+        ctx.fillRect(25, -3, 25, 6);
+        ctx.fillRect(20, 5, 8, 12);
+        
+        // Руки
+        ctx.fillStyle = skinColor;
+        ctx.beginPath();
+        ctx.arc(25, -5, 5, 0, Math.PI * 2);
+        ctx.arc(15, 5, 5, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Глаза
+        ctx.fillStyle = isBot ? '#ff0000' : '#000';
+        ctx.beginPath();
+        ctx.arc(12, -5, 2, 0, Math.PI * 2);
+        ctx.arc(12, 5, 2, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.restore();
+    }
+
+    function draw() {
+        // Фон
+        ctx.fillStyle = '#5c8a4a';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        let screenW = canvas.width;
+        let screenH = canvas.height;
+        
+        // Ограничение камеры по краям карты
+        let camMinX = screenH / 2;
+        let camMaxX = CONFIG.mapWidth - screenH / 2;
+        let camMinY = screenW / 2;
+        let camMaxY = CONFIG.mapHeight - screenW / 2;
+        
+        let camX = Math.max(camMinX, Math.min(camera.x, camMaxX));
+        let camY = Math.max(camMinY, Math.min(camera.y, camMaxY));
+        
+        if (CONFIG.mapWidth < screenH) camX = CONFIG.mapWidth / 2;
+        if (CONFIG.mapHeight < screenW) camY = CONFIG.mapHeight / 2;
+
+        ctx.save();
+        
+        // Поворот мира на 90 градусов
+        ctx.translate(canvas.width / 2, canvas.height / 2);
+        ctx.rotate(Math.PI / 2);
+        ctx.translate(-canvas.height / 2, -canvas.width / 2);
+        
+        ctx.translate(-camX + screenH / 2, -camY + screenW / 2);
+
+        // Рисуем стены
+        walls.forEach(w => {
+            ctx.fillStyle = 'rgba(0,0,0,0.4)';
+            ctx.fillRect(w.x + 8, w.y + 8, w.w, w.h);
+            ctx.fillStyle = '#7f8c8d';
+            ctx.fillRect(w.x, w.y, w.w, w.h);
+            ctx.fillStyle = '#bdc3c7';
+            ctx.fillRect(w.x, w.y, w.w, 8);
+            ctx.fillRect(w.x, w.y, 8, w.h);
+            
+            ctx.save();
+            ctx.translate(w.x + w.w/2, w.y + w.h/2);
+            ctx.rotate(-Math.PI / 2);
+            ctx.fillStyle = '#fff';
+            ctx.font = 'bold 22px Arial';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.strokeStyle = '#000';
+            ctx.lineWidth = 3;
+            ctx.strokeText('Стена', 0, 0);
+            ctx.fillText('Стена', 0, 0);
+            ctx.restore();
+        });
+
+        // Рисуем игрока
+        drawPlayer(player.x, player.y, player.angle, false);
+
+        // Рисуем ботов
+        bots.forEach(bot => {
+            if (bot.hp <= 0) return;
+            
+            // Мигание при спавне
+            if (bot.spawnTimer > 0 && Math.floor(bot.spawnTimer / 5) % 2 === 0) {
+                return; // Пропускаем отрисовку для эффекта мигания
+            }
+            
+            drawPlayer(bot.x, bot.y, bot.angle, true);
+            
+            ctx.save();
+            ctx.translate(bot.x, bot.y - 45);
+            ctx.rotate(-Math.PI / 2);
+            ctx.fillStyle = '#000';
+            ctx.fillRect(-25, 0, 50, 8);
+            ctx.fillStyle = '#e74c3c';
+            ctx.fillRect(-25, 0, 50 * (bot.hp / bot.maxHp), 8);
+            ctx.restore();
+        });
+
+        // Рисуем пули
+        bullets.forEach(b => {
+            ctx.fillStyle = b.color;
+            ctx.beginPath();
+            ctx.arc(b.x, b.y, 6, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.strokeStyle = b.color;
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.moveTo(b.x, b.y);
+            ctx.lineTo(b.x - b.vx * 2, b.y - b.vy * 2);
+            ctx.stroke();
+        });
+
+        ctx.restore();
+
+        // Обновление UI
+        if (isGameRunning) {
+            document.getElementById('ammo-display').innerText = `Патроны:${ammo}/${MAGAZINE_SIZE}`;
+            if (isReloading) {
+                document.getElementById('ammo-display').innerText = 'ПЕРЕЗАРЯДКА...';
+            }
+        }
+    }
+
+    function gameLoop() {
+        update();
+        draw();
+        requestAnimationFrame(gameLoop);
+    }
+
+    // Полифилл для roundRect
+    if (!CanvasRenderingContext2D.prototype.roundRect) {
+        CanvasRenderingContext2D.prototype.roundRect = function (x, y, w, h, r) {
+            if (w < 2 * r) r = w / 2;
+            if (h < 2 * r) r = h / 2;
+            this.beginPath();
+            this.moveTo(x + r, y);
+            this.arcTo(x + w, y, x + w, y + h, r);
+            this.arcTo(x + w, y + h, x, y + h, r);
+            this.arcTo(x, y + h, x, y, r);
+            this.arcTo(x, y, x + w, y, r);
+            this.closePath();
+            return this;
+        };
+    }
+
+    init();
+</script>
+</body>
+</html>
